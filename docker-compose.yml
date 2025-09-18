@@ -71,10 +71,26 @@ services:
     container_name: rabbitmq
     ports:
       - 5673:5672
-      - 15672:15672
+      - 15673:15672
     environment:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
+    networks:
+      - jeromes
+
+  # MinIO S3-compatible object storage
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    ports:
+      - "9002:9000"
+      - "9003:9001"
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-admin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-password123}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
     networks:
       - jeromes
 
@@ -82,6 +98,7 @@ volumes:
   postgres_data:
   pgadmin_data:
   redis_data:
+  minio_data:
 
 
 networks:
