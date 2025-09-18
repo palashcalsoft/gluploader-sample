@@ -1,6 +1,6 @@
 services:
   nginx:
-    image: nginx:alpine
+    image: nginx:1.18
     container_name: nginx
     ports:
       - 8081:80
@@ -56,12 +56,25 @@ services:
       - jeromes
 
   redis:
-    image: redis:8.2
+    image: redis:7.2
     container_name: redis
     ports:
-      - 6379:6379
+      - 6380:6379
     volumes:
       - redis_data:/data
+    networks:
+      - jeromes
+
+  #add rabbit mq service
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - 5673:5672
+      - 15672:15672
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
     networks:
       - jeromes
 
