@@ -16,7 +16,7 @@ services:
     build:
       context: .
       dockerfile: ./docker/web/Dockerfile
-    container_name: php
+    container_name: web
     user: "${DOCKER_UID}:${DOCKER_GID}"
     volumes:
       - ./web:/var/www/html
