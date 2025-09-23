@@ -6,6 +6,9 @@ chmod -R 775 /var/www/html/storage
 # Ensure composer dependencies are installed
 composer install --no-scripts --no-interaction --prefer-dist
 
+# Optimize Composer autoloads
+composer dump-autoload -o
+
 # Run your Laravel artisan command
 php artisan migrate:fresh --seed
 
