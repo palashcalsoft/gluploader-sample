@@ -22,6 +22,3 @@ Route::middleware('auth')->group(function () {
 
     Route::post('/gl/upload', [GLEntryUploadController::class, 'store'])->name('gl.upload');
 });
-
-Route::post('/minio-test', [App\Http\Controllers\MinioTestController::class, 'store']);
-Route::get('/minio-test', [App\Http\Controllers\MinioTestController::class, 'index']);

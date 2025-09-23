@@ -3,13 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Services\GLEntryUploadService;
+use App\Services\MinioStorageService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class GLEntryUploadController extends Controller
 {
-    public function __construct(private readonly GLEntryUploadService $service)
-    {
+    public function __construct(
+        private readonly GLEntryUploadService $service,
+        private readonly MinioStorageService $storage,
+    ) {
     }
 
     /**
@@ -36,7 +39,16 @@ class GLEntryUploadController extends Controller
         $user = Auth::user();
         $uploadedBy = $user ? $user->email : 'system';
 
-        $result = $this->service->process($file, (string)$request->input('loft_username'), $uploadedBy);
+        try {
+            $stored = $this->storage->storeUploadedFile($file, 'gl-uploads');
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Failed to store file to MinIO.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+
+        $result = $this->service->process($file, (string)$request->input('loft_username'), $uploadedBy, $stored);
         $httpCode = $result['http_code'] ?? 200;
         unset($result['http_code']);
         return response()->json($result, $httpCode);

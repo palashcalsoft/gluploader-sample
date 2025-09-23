@@ -16,6 +16,7 @@ export function initSidebarToggle() {
         if (!sidebar) return;
         sidebar.classList.toggle('w-64');
         sidebar.classList.toggle('w-16');
+        sidebar.classList.toggle('collapsed');
     });
 }
 
@@ -45,6 +46,7 @@ function initGLUploader() {
     const nextPage = document.getElementById('nextPage');
     const paginationInfo = document.getElementById('paginationInfo');
     const downloadCsvBtn = document.getElementById('downloadCsvBtn');
+    const fullscreenLoader = document.getElementById('fullscreenLoader');
 
     let failedRecords = [];
     let filtered = [];
@@ -58,6 +60,11 @@ function initGLUploader() {
 
     function showLoader(show) {
         loader.classList.toggle('hidden', !show);
+    }
+
+    function showFullscreenLoader(show) {
+        if (!fullscreenLoader) return;
+        fullscreenLoader.classList.toggle('hidden', !show);
     }
 
     function handleFiles(files) {
@@ -106,6 +113,7 @@ function initGLUploader() {
         formData.append('password', form.password.value);
 
         showLoader(true);
+        showFullscreenLoader(true);
         try {
             const resp = await window.axios.post('/gl/upload', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
@@ -127,6 +135,7 @@ function initGLUploader() {
             }
         } finally {
             showLoader(false);
+            showFullscreenLoader(false);
         }
     });
 

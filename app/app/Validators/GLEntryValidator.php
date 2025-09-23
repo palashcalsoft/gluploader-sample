@@ -53,19 +53,44 @@ class GLEntryValidator
      */
     public function validateRow($postingDate, $accountNumber, $debit, $credit): ?string
     {
-        if (!$postingDate) return 'Posting date is required';
-        try {
-            $this->parseDate($postingDate);
-        } catch (\Throwable $e) {
-            return 'Invalid posting date';
+        $errors = $this->validateRowAll($postingDate, $accountNumber, $debit, $credit);
+        return empty($errors) ? null : implode('; ', $errors);
+    }
+
+    /**
+     * Validate a single CSV row and return all error messages.
+     */
+    public function validateRowAll($postingDate, $accountNumber, $debit, $credit): array
+    {
+        $errors = [];
+
+        if (!$postingDate) {
+            $errors[] = 'Posting date is required';
+        } else {
+            try {
+                $this->parseDate($postingDate);
+            } catch (\Throwable $e) {
+                $errors[] = 'Invalid posting date';
+            }
         }
-        if (!$accountNumber) return 'Account number is required';
+
+        if (!$accountNumber) {
+            $errors[] = 'Invalid account number';
+        }
+
         $debitAmount = $this->parseMoney($debit);
         $creditAmount = $this->parseMoney($credit);
-        if ($debitAmount < 0 || $creditAmount < 0) return 'Amounts cannot be negative';
-        if ($debitAmount > 0 && $creditAmount > 0) return 'Both debit and credit cannot be positive';
-        if ($debitAmount == 0 && $creditAmount == 0) return 'Either debit or credit required';
-        return null;
+        if ($debitAmount < 0 || $creditAmount < 0) {
+            $errors[] = 'Amounts cannot be negative';
+        }
+        if ($debitAmount > 0 && $creditAmount > 0) {
+            $errors[] = 'Both debit and credit cannot be positive';
+        }
+        if ($debitAmount == 0 && $creditAmount == 0) {
+            $errors[] = 'Either debit or credit required';
+        }
+
+        return $errors;
     }
 
     /**

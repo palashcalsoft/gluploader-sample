@@ -18,35 +18,41 @@ class GLEntryUploadService
 
     /**
      * Process an uploaded GL CSV: parse, validate, persist.
-     * Returns an array with keys: http_code, status, and additional fields based on status.
+     * Returns an array with keys: http_code, status, file, and additional fields based on status.
      */
-    public function process(UploadedFile $file, string $loftUsername, string $uploadedBy): array
+    public function process(UploadedFile $file, string $loftUsername, string $uploadedBy, array $storedFileMeta = []): array
     {
         $contents = $this->readCsvLines($file);
         if (!$this->hasHeaderAndData($contents)) {
-            return $this->responseUnprocessable('CSV must contain a header and at least one data row.');
+            return $this->responseUnprocessable('CSV must contain a header and at least one data row.', $storedFileMeta);
         }
 
         try {
             $columnIndex = $this->parseHeaderAndBuildIndex($contents);
         } catch (\Throwable $e) {
-            return $this->responseUnprocessable($e->getMessage());
+            return $this->responseUnprocessable($e->getMessage(), $storedFileMeta);
         }
 
-        [$rows, $failed] = $this->buildRowsAndValidate($contents, $columnIndex);
+        [$rows, $failed] = $this->extractRows($contents, $columnIndex);
+        $validAccountLookup = $this->buildValidAccountLookup($rows);
+        $this->applyRowValidations($rows, $validAccountLookup);
+
+        $failed = array_values(array_filter($rows, function ($r) {
+            return !empty($r['failure_reason']);
+        }));
 
         if (count($failed) > 0) {
-            return $this->responseFailedRows($rows, $failed);
+            return $this->responseFailedRows($rows, $failed, $storedFileMeta);
         }
 
         try {
             $this->persistRows($rows, $loftUsername, $uploadedBy);
         } catch (\Throwable $e) {
             Log::error('GL upload failed', ['error' => $e->getMessage()]);
-            return $this->responseTechnicalError($rows, $e);
+            return $this->responseTechnicalError($rows, $e, $storedFileMeta);
         }
 
-        return $this->responseSuccess();
+        return $this->responseSuccess($storedFileMeta);
     }
 
     private function readCsvLines(UploadedFile $file): array
@@ -66,67 +72,61 @@ class GLEntryUploadService
         return $this->validator->buildColumnIndex($normalizedHeader);
     }
 
-    private function buildRowsAndValidate(array $contents, array $columnIndex): array
+    private function extractRows(array $contents, array $columnIndex): array
     {
         $rows = [];
-        $failed = [];
         $rowNumber = 1;
-
-        // Prefetch valid account codes to avoid per-row queries
-        $allAccountNumbers = [];
-        foreach ($contents as $lineForAccounts) {
-            $dataForAccounts = str_getcsv($lineForAccounts);
-            $acct = $dataForAccounts[$columnIndex['accountnumber']] ?? null;
-            $acct = is_string($acct) ? trim($acct) : $acct;
-            if ($acct !== null && $acct !== '') {
-                $allAccountNumbers[] = $acct;
-            }
-        }
-        $allAccountNumbers = array_values(array_unique($allAccountNumbers));
-        $validAccountCodes = [];
-        if (!empty($allAccountNumbers)) {
-            $validAccountCodes = AccountMaster::whereIn('code', $allAccountNumbers)->pluck('code')->all();
-        }
-        $validAccountLookup = array_fill_keys($validAccountCodes, true);
-
         foreach ($contents as $line) {
             $rowNumber++;
             $data = str_getcsv($line);
-
-            $postingDate = $data[$columnIndex['posting date']] ?? null;
-            $reference = $data[$columnIndex['reference']] ?? null;
-            $journalCode = $data[$columnIndex['journal code']] ?? null;
             $accountNumber = $data[$columnIndex['accountnumber']] ?? null;
             $accountNumber = is_string($accountNumber) ? trim($accountNumber) : $accountNumber;
-            $postingDescription = $data[$columnIndex['posting description']] ?? null;
-            $debit = $data[$columnIndex['debit']] ?? null;
-            $credit = $data[$columnIndex['credit']] ?? null;
-
-            $failureReason = $this->validator->validateRow($postingDate, $accountNumber, $debit, $credit);
-
-            if (!$failureReason && $accountNumber !== null && $accountNumber !== '' && !isset($validAccountLookup[$accountNumber])) {
-                $failureReason = 'Account number not found in Account Master';
-            }
-
-            $row = [
+            $rows[] = [
                 'row_number' => $rowNumber - 1,
-                'posting_date' => $postingDate,
-                'reference' => $reference,
-                'journal_code' => $journalCode,
+                'posting_date' => $data[$columnIndex['posting date']] ?? null,
+                'reference' => $data[$columnIndex['reference']] ?? null,
+                'journal_code' => $data[$columnIndex['journal code']] ?? null,
                 'account_number' => $accountNumber,
-                'posting_description' => $postingDescription,
-                'debit' => $debit,
-                'credit' => $credit,
-                'failure_reason' => $failureReason,
+                'posting_description' => $data[$columnIndex['posting description']] ?? null,
+                'debit' => $data[$columnIndex['debit']] ?? null,
+                'credit' => $data[$columnIndex['credit']] ?? null,
+                'failure_reason' => null,
             ];
+        }
+        return [$rows, []];
+    }
 
-            $rows[] = $row;
-            if ($failureReason) {
-                $failed[] = $row;
-            }
+    private function buildValidAccountLookup(array $rows): array
+    {
+        $allAccountNumbers = array_values(array_unique(array_filter(array_map(function ($r) {
+            $acct = $r['account_number'] ?? null;
+            return is_string($acct) ? trim($acct) : $acct;
+        }, $rows), function ($v) {
+            return $v !== null && $v !== '';
+        })));
+
+        if (empty($allAccountNumbers)) {
+            return [];
         }
 
-        return [$rows, $failed];
+        $validAccountCodes = AccountMaster::whereIn('code', $allAccountNumbers)->pluck('code')->all();
+        return array_fill_keys($validAccountCodes, true);
+    }
+
+    private function applyRowValidations(array &$rows, array $validAccountLookup): void
+    {
+        foreach ($rows as &$row) {
+            $errors = $this->validator->validateRowAll($row['posting_date'], $row['account_number'], $row['debit'], $row['credit']);
+            if (
+                $row['account_number'] !== null &&
+                $row['account_number'] !== '' &&
+                !isset($validAccountLookup[$row['account_number']])
+            ) {
+                $errors[] = 'Invalid Account number';
+            }
+            $row['failure_reason'] = empty($errors) ? null : implode('; ', $errors);
+        }
+        unset($row);
     }
 
     private function persistRows(array $rows, string $loftUsername, string $uploadedBy): void
@@ -140,8 +140,10 @@ class GLEntryUploadService
                 'failed_rows' => 0,
             ]);
 
+            $payload = [];
+            $now = now();
             foreach ($rows as $row) {
-                GLEntryDetail::create([
+                $payload[] = [
                     'gl_entry_master_id' => $master->id,
                     'posting_date' => $this->validator->parseDate($row['posting_date']),
                     'reference' => $row['reference'],
@@ -152,21 +154,33 @@ class GLEntryUploadService
                     'credit' => $this->validator->parseMoney($row['credit']),
                     'row_number' => $row['row_number'],
                     'failure_reason' => null,
-                ]);
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+
+                if (count($payload) === 1000) {
+                    GLEntryDetail::insert($payload);
+                    $payload = [];
+                }
+            }
+
+            if (!empty($payload)) {
+                GLEntryDetail::insert($payload);
             }
         });
     }
 
-    private function responseUnprocessable(string $message): array
+    private function responseUnprocessable(string $message, ?array $fileMeta = null): array
     {
         return [
             'http_code' => 422,
             'status' => 'failed',
             'message' => $message,
+            'file' => $fileMeta,
         ];
     }
 
-    private function responseFailedRows(array $rows, array $failed): array
+    private function responseFailedRows(array $rows, array $failed, ?array $fileMeta = null): array
     {
         return [
             'http_code' => 422,
@@ -174,10 +188,11 @@ class GLEntryUploadService
             'failed_records' => $failed,
             'total' => count($rows),
             'failed' => count($failed),
+            'file' => $fileMeta,
         ];
     }
 
-    private function responseTechnicalError(array $rows, \Throwable $e): array
+    private function responseTechnicalError(array $rows, \Throwable $e, ?array $fileMeta = null): array
     {
         $withFailure = array_map(function ($r) use ($e) {
             $r['failure_reason'] = 'Technical error: ' . $e->getMessage();
@@ -190,15 +205,17 @@ class GLEntryUploadService
             'failed_records' => $withFailure,
             'total' => count($rows),
             'failed' => count($withFailure),
+            'file' => $fileMeta,
         ];
     }
 
-    private function responseSuccess(): array
+    private function responseSuccess(?array $fileMeta = null): array
     {
         return [
             'http_code' => 200,
             'status' => 'success',
             'message' => 'GL entries uploaded successfully.',
+            'file' => $fileMeta,
         ];
     }
 }

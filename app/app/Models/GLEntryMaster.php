@@ -10,6 +10,8 @@ class GLEntryMaster extends Model
 {
     use HasFactory;
 
+    protected $table = 'gl_entry_masters';
+
     protected $fillable = [
         'uploaded_by',
         'loft_username',

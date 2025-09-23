@@ -10,6 +10,8 @@ class GLEntryDetail extends Model
 {
     use HasFactory;
 
+    protected $table = 'gl_entry_details';
+
     protected $fillable = [
         'gl_entry_master_id',
         'posting_date',
