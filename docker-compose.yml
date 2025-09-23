@@ -17,7 +17,6 @@ services:
       context: .
       dockerfile: ./docker/web/Dockerfile
     container_name: web
-    user: "${DOCKER_UID}:${DOCKER_GID}"
     volumes:
       - ./web:/var/www/html
       - ./docker/web/php.ini:/usr/local/etc/php/php.ini
@@ -102,7 +101,6 @@ services:
     container_name: worker
     ports:
       - 8085:80
-    user: "${DOCKER_UID}:${DOCKER_GID}"
     volumes:
       - ./worker:/var/www/html
       - ./docker/worker/php.ini:/usr/local/etc/php/php.ini
