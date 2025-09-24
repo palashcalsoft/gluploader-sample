@@ -23,11 +23,31 @@ export function initSidebarToggle() {
 if (document.readyState !== 'loading') {
     initSidebarToggle();
     initGLUploader();
+    initUploadsTable();
 } else {
     document.addEventListener('DOMContentLoaded', () => {
         initSidebarToggle();
         initGLUploader();
+        initUploadsTable();
     });
+}
+
+function formatDateTime(value) {
+	if (!value) return '';
+	try {
+		const date = value instanceof Date ? value : new Date(value);
+		if (isNaN(date.getTime())) return String(value);
+		return new Intl.DateTimeFormat(undefined, {
+			year: 'numeric',
+			month: 'short',
+			day: '2-digit',
+			hour: '2-digit',
+			minute: '2-digit',
+			hour12: false,
+		}).format(date);
+	} catch (e) {
+		return String(value);
+	}
 }
 
 function initGLUploader() {
@@ -39,19 +59,9 @@ function initGLUploader() {
     const fileName = document.getElementById('fileName');
     const loader = document.getElementById('loader');
     const message = document.getElementById('message');
-    const failurePanel = document.getElementById('failurePanel');
-    const failedTbody = document.getElementById('failedTbody');
-    const searchInput = document.getElementById('searchInput');
-    const prevPage = document.getElementById('prevPage');
-    const nextPage = document.getElementById('nextPage');
-    const paginationInfo = document.getElementById('paginationInfo');
-    const downloadCsvBtn = document.getElementById('downloadCsvBtn');
     const fullscreenLoader = document.getElementById('fullscreenLoader');
 
-    let failedRecords = [];
-    let filtered = [];
-    let currentPage = 1;
-    const pageSize = 100;
+    // legacy variables removed after UI change
 
     function setMessage(text, type = 'info') {
         message.textContent = text;
@@ -99,7 +109,7 @@ function initGLUploader() {
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         setMessage('');
-        failurePanel.classList.add('hidden');
+        // failed panel removed
 
         const file = fileInput.files?.[0];
         if (!file) {
@@ -121,107 +131,59 @@ function initGLUploader() {
             setMessage('Upload successful.', 'success');
             form.reset();
             fileName.textContent = '';
+            // refresh uploads table if present
+            if (typeof window.__refreshUploads === 'function') window.__refreshUploads();
         } catch (err) {
             const data = err?.response?.data;
-            if (data && data.failed_records) {
-                failedRecords = data.failed_records;
-                filtered = failedRecords;
-                currentPage = 1;
-                renderTable();
-                failurePanel.classList.remove('hidden');
-                setMessage('Some rows failed validation. See details below.', 'error');
-            } else {
-                setMessage(data?.message || 'Upload failed.', 'error');
-            }
+            setMessage(data?.message || 'Upload failed.', 'error');
         } finally {
             showLoader(false);
             showFullscreenLoader(false);
         }
     });
+}
 
-    function renderTable() {
-        const q = searchInput.value.trim().toLowerCase();
-        filtered = failedRecords.filter((r) => {
-            if (!q) return true;
-            return (
-                String(r.row_number).includes(q) ||
-                (r.posting_date || '').toLowerCase().includes(q) ||
-                (r.reference || '').toLowerCase().includes(q) ||
-                (r.journal_code || '').toLowerCase().includes(q) ||
-                (r.account_number || '').toLowerCase().includes(q) ||
-                (r.posting_description || '').toLowerCase().includes(q) ||
-                String(r.debit || '').toLowerCase().includes(q) ||
-                String(r.credit || '').toLowerCase().includes(q) ||
-                (r.failure_reason || '').toLowerCase().includes(q)
-            );
-        });
+function initUploadsTable() {
+    const tbody = document.getElementById('uploadsTbody');
+    const info = document.getElementById('uploadsInfo');
+    const prev = document.getElementById('uploadsPrev');
+    const next = document.getElementById('uploadsNext');
+    if (!tbody || !info || !prev || !next) return;
 
-        const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-        if (currentPage > totalPages) currentPage = totalPages;
-        const start = (currentPage - 1) * pageSize;
-        const page = filtered.slice(start, start + pageSize);
+    let pageUrl = '/gl/masters';
+    let pollTimer = null;
 
-        failedTbody.innerHTML = page
-            .map((r) => {
-                return `<tr>
-                    <td class="px-3 py-2">${r.row_number ?? ''}</td>
-                    <td class="px-3 py-2">${r.posting_date ?? ''}</td>
-                    <td class="px-3 py-2">${r.reference ?? ''}</td>
-                    <td class="px-3 py-2">${r.journal_code ?? ''}</td>
-                    <td class="px-3 py-2">${r.account_number ?? ''}</td>
-                    <td class="px-3 py-2">${r.posting_description ?? ''}</td>
-                    <td class="px-3 py-2">${r.debit ?? ''}</td>
-                    <td class="px-3 py-2">${r.credit ?? ''}</td>
-                    <td class="px-3 py-2">${r.failure_reason ?? ''}</td>
-                </tr>`;
-            })
-            .join('');
+    async function load(url) {
+        const resp = await window.axios.get(url);
+        const data = resp.data;
+        const items = data.data || [];
+        tbody.innerHTML = items.map(item => {
+            const statusMap = { 'In Progress': 'text-blue-600', 'Success': 'text-green-600', 'Failed': 'text-red-600' };
+            const statusClass = statusMap[item.status] || 'text-gray-700';
+            return `<tr>
+                <td class="px-3 py-2">${item.id}</td>
+                <td class="px-3 py-2">${item.uploaded_by ?? ''}</td>
+                <td class="px-3 py-2">${item.file_name ?? ''}</td>
+                <td class="px-3 py-2">${formatDateTime(item.uploaded_at)}</td>
+                <td class="px-3 py-2">${item.total_rows ?? 0}</td>
+                <td class="px-3 py-2 ${statusClass}">${item.status ?? ''}</td>
+                <td class="px-3 py-2">
+                    <a target="_blank" rel="noopener" href="/gl/masters/${item.id}" class="text-indigo-600 hover:underline">Open</a>
+                </td>
+            </tr>`;
+        }).join('');
 
-        paginationInfo.textContent = `Showing ${filtered.length === 0 ? 0 : start + 1}-${Math.min(
-            start + page.length,
-            filtered.length
-        )} of ${filtered.length}`;
-        prevPage.disabled = currentPage === 1;
-        nextPage.disabled = currentPage >= totalPages;
+        info.textContent = `Page ${data.current_page} of ${data.last_page} • ${data.total} total`;
+        prev.disabled = !data.prev_page_url;
+        next.disabled = !data.next_page_url;
+        prev.onclick = () => { if (data.prev_page_url) load(data.prev_page_url); };
+        next.onclick = () => { if (data.next_page_url) load(data.next_page_url); };
     }
 
-    prevPage.addEventListener('click', () => {
-        if (currentPage > 1) {
-            currentPage--;
-            renderTable();
-        }
-    });
-    nextPage.addEventListener('click', () => {
-        currentPage++;
-        renderTable();
-    });
-    searchInput.addEventListener('input', () => {
-        currentPage = 1;
-        renderTable();
-    });
-
-    downloadCsvBtn.addEventListener('click', () => {
-        const headers = [
-            'Row','Posting Date','Reference','Journal Code','Account#','Posting Description','Debit','Credit','Failure Reason'
-        ];
-        const rows = filtered.map((r) => [
-            r.row_number, r.posting_date, r.reference, r.journal_code, r.account_number, r.posting_description, r.debit, r.credit, r.failure_reason
-        ]);
-        const csv = [headers.join(','), ...rows.map((cols) => cols.map(escapeCsv).join(','))].join('\n');
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'failed_records.csv';
-        a.click();
-        URL.revokeObjectURL(url);
-    });
-
-    function escapeCsv(value) {
-        const s = String(value ?? '');
-        if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-            return '"' + s.replace(/"/g, '""') + '"';
-        }
-        return s;
-    }
+    window.__refreshUploads = () => load(pageUrl).catch(() => {});
+    const startPolling = () => {
+        if (pollTimer) clearInterval(pollTimer);
+        pollTimer = setInterval(() => load(pageUrl).catch(() => {}), 3000);
+    };
+    load(pageUrl).catch(() => {}).finally(startPolling);
 }

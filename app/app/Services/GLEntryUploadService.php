@@ -41,15 +41,16 @@ class GLEntryUploadService
             return !empty($r['failure_reason']);
         }));
 
-        if (count($failed) > 0) {
-            return $this->responseFailedRows($rows, $failed, $storedFileMeta);
-        }
-
         try {
-            $this->persistRows($rows, $loftUsername, $uploadedBy);
+            $hasFailures = count($failed) > 0;
+            $this->persistRows($rows, $loftUsername, $uploadedBy, $storedFileMeta['filename'] ?? null, $hasFailures);
         } catch (\Throwable $e) {
             Log::error('GL upload failed', ['error' => $e->getMessage()]);
             return $this->responseTechnicalError($rows, $e, $storedFileMeta);
+        }
+
+        if (count($failed) > 0) {
+            return $this->responseFailedRows($rows, $failed, $storedFileMeta);
         }
 
         return $this->responseSuccess($storedFileMeta);
@@ -129,15 +130,17 @@ class GLEntryUploadService
         unset($row);
     }
 
-    private function persistRows(array $rows, string $loftUsername, string $uploadedBy): void
+    private function persistRows(array $rows, string $loftUsername, string $uploadedBy, ?string $fileName = null, bool $hasFailures = false): void
     {
-        DB::transaction(function () use ($rows, $loftUsername, $uploadedBy) {
+        DB::transaction(function () use ($rows, $loftUsername, $uploadedBy, $fileName, $hasFailures) {
             $master = GLEntryMaster::create([
                 'uploaded_by' => $uploadedBy,
                 'loft_username' => $loftUsername,
                 'uploaded_at' => now(),
                 'total_rows' => count($rows),
-                'failed_rows' => 0,
+                'failed_rows' => $hasFailures ? count(array_filter($rows, fn($r)=>!empty($r['failure_reason']))) : 0,
+                'status' => $hasFailures ? 'Failed' : 'Success',
+                'file_name' => $fileName,
             ]);
 
             $payload = [];
@@ -145,7 +148,7 @@ class GLEntryUploadService
             foreach ($rows as $row) {
                 $payload[] = [
                     'gl_entry_master_id' => $master->id,
-                    'posting_date' => $this->validator->parseDate($row['posting_date']),
+                    'posting_date' => $row['failure_reason'] ? null : $this->validator->parseDate($row['posting_date']),
                     'reference' => $row['reference'],
                     'journal_code' => $row['journal_code'],
                     'account_number' => $row['account_number'],
@@ -153,7 +156,7 @@ class GLEntryUploadService
                     'debit' => $this->validator->parseMoney($row['debit']),
                     'credit' => $this->validator->parseMoney($row['credit']),
                     'row_number' => $row['row_number'],
-                    'failure_reason' => null,
+                    'failure_reason' => $row['failure_reason'] ?? null,
                     'created_at' => $now,
                     'updated_at' => $now,
                 ];

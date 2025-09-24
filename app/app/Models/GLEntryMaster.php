@@ -18,6 +18,8 @@ class GLEntryMaster extends Model
         'uploaded_at',
         'total_rows',
         'failed_rows',
+        'status',
+        'file_name',
     ];
 
     protected $casts = [

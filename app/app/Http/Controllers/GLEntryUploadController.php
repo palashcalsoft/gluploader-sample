@@ -37,7 +37,7 @@ class GLEntryUploadController extends Controller
         $file = $request->file('file');
         /** @var \App\Models\User|null $user */
         $user = Auth::user();
-        $uploadedBy = $user ? $user->email : 'system';
+        $uploadedBy = $user ? ($user->username ?? $user->email) : 'system';
 
         try {
             $stored = $this->storage->storeUploadedFile($file, 'gl-uploads');

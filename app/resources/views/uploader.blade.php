@@ -35,37 +35,31 @@
         </form>
     </div>
 
-    <div id="failurePanel" class="hidden rounded-xl border border-gray-200 bg-white p-6">
-        <div class="flex items-center justify-between">
-            <h3 class="text-base font-semibold">Failed Records</h3>
-            <button id="downloadCsvBtn" class="rounded-md bg-gray-100 px-3 py-1.5 text-sm hover:bg-gray-200">Download CSV</button>
+    <div class="rounded-xl border border-gray-200 bg-white p-6">
+        <div class="mb-3 flex items-center justify-between">
+            <h3 class="text-base font-semibold">Uploads</h3>
         </div>
-        <div class="mt-3 flex items-center gap-2">
-            <input id="searchInput" type="text" placeholder="Search..." class="w-64 rounded-md border border-gray-300 p-2 text-sm" />
-        </div>
-        <div class="mt-4 overflow-x-auto">
+        <div class="overflow-x-auto">
             <table class="min-w-full text-left text-sm">
                 <thead class="bg-gray-50 text-xs uppercase text-gray-500">
                     <tr>
-                        <th class="px-3 py-2">Row</th>
-                        <th class="px-3 py-2">Posting Date</th>
-                        <th class="px-3 py-2">Reference</th>
-                        <th class="px-3 py-2">Journal Code</th>
-                        <th class="px-3 py-2">Account#</th>
-                        <th class="px-3 py-2">Posting Description</th>
-                        <th class="px-3 py-2">Debit</th>
-                        <th class="px-3 py-2">Credit</th>
-                        <th class="px-3 py-2">Failure Reason</th>
+                        <th class="px-3 py-2">ID</th>
+                        <th class="px-3 py-2">Who uploaded</th>
+                        <th class="px-3 py-2">File name</th>
+                        <th class="px-3 py-2">Uploaded At</th>
+                        <th class="px-3 py-2">Records</th>
+                        <th class="px-3 py-2">Status</th>
+                        <th class="px-3 py-2">Action</th>
                     </tr>
                 </thead>
-                <tbody id="failedTbody" class="divide-y divide-gray-100"></tbody>
+                <tbody id="uploadsTbody" class="divide-y divide-gray-100"></tbody>
             </table>
         </div>
-        <div class="mt-4 flex items-center justify-between">
-            <div id="paginationInfo" class="text-xs text-gray-600"></div>
+        <div class="mt-3 flex items-center justify-between text-sm text-gray-600">
+            <div id="uploadsInfo"></div>
             <div class="flex items-center gap-2">
-                <button id="prevPage" class="rounded-md border px-2 py-1 text-sm disabled:opacity-50">Prev</button>
-                <button id="nextPage" class="rounded-md border px-2 py-1 text-sm disabled:opacity-50">Next</button>
+                <button id="uploadsPrev" class="rounded-md border px-2 py-1 text-sm disabled:opacity-50">Prev</button>
+                <button id="uploadsNext" class="rounded-md border px-2 py-1 text-sm disabled:opacity-50">Next</button>
             </div>
         </div>
     </div>

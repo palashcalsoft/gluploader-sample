@@ -17,13 +17,15 @@ return new class extends Migration {
             $table->timestamp('uploaded_at')->useCurrent();
             $table->unsignedInteger('total_rows')->default(0);
             $table->unsignedInteger('failed_rows')->default(0);
+            $table->string('status')->default('In Progress');
+            $table->string('file_name')->nullable();
             $table->timestamps();
         });
 
         Schema::create('gl_entry_details', function (Blueprint $table) {
             $table->id();
             $table->foreignId('gl_entry_master_id')->constrained('gl_entry_masters')->cascadeOnDelete();
-            $table->date('posting_date');
+            $table->date('posting_date')->nullable();
             $table->string('reference')->nullable();
             $table->string('journal_code')->nullable();
             $table->string('account_number');

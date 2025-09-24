@@ -17,19 +17,19 @@ class LoginController extends Controller
     public function login(Request $request)
     {
         $credentials = $request->validate([
-            'email' => ['required', 'string', 'email'],
+            'username' => ['required', 'string'],
             'password' => ['required', 'string'],
         ]);
 
         $remember = $request->boolean('remember');
 
-        if (Auth::attempt($credentials, $remember)) {
+        if (Auth::attempt(['username' => $credentials['username'], 'password' => $credentials['password']], $remember)) {
             $request->session()->regenerate();
             return redirect()->intended(route('home'));
         }
 
         throw ValidationException::withMessages([
-            'email' => __('auth.failed'),
+            'username' => __('auth.failed'),
         ]);
     }
 
