@@ -117,15 +117,25 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: nextjs
+    user: "0:0"
     ports:
       - "8080:3000"
     environment:
       - NEXT_PUBLIC_API_BASE_URL=http://localhost:8081
       - INTERNAL_API_BASE_URL=http://nginx
-    networks:
-      - jeromes
+      - NODE_ENV=development
+      - CHOKIDAR_USEPOLLING=true
+      - CHOKIDAR_INTERVAL=1000
+      - WATCHPACK_POLLING=true
+      - WATCHPACK_POLL_INTERVAL=1000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run dev"
     depends_on:
       - nginx
+    networks:
+      - jeromes
 
 volumes:
   postgres_data:
