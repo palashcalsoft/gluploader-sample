@@ -20,5 +20,6 @@ composer install --no-scripts --no-interaction --prefer-dist
 
 # Generate application key if not exists
 php artisan key:generate --no-interaction
+php artisan optimize:clear
 
 exec php-fpm
