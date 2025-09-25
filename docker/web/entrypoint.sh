@@ -20,8 +20,8 @@ composer install --no-scripts --no-interaction --prefer-dist
 
 # Generate application key if not exists
 php artisan key:generate --no-interaction
-
+php artisan optimize:clear
 # Run your Laravel artisan command
-php artisan migrate:fresh --seed
+php artisan migrate
 
 exec php-fpm
